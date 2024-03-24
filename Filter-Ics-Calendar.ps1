@@ -1,7 +1,8 @@
 param (
     [string]$SourceFile = $(throw "-SourceFile is required."),
     [string]$DestFile = $(throw "-DestFile is required."),
-    [string]$FilterSummary = $(throw "-FilterSummary is required."),    
+    [string]$FilterSummary = $(throw "-FilterSummary is required."),
+    [string]$StartDate,
     [string]$NewTitle = ""
 )
 
@@ -11,7 +12,7 @@ $saveFile = @()
 
 $lines = Get-Content -Path $SourceFile
 $eventCount = 0
-$foundCount = 0;
+$foundCount = 0
 foreach ($line in $lines) {
     if ($line -eq 'BEGIN:VEVENT') {
         if ($collect) {
@@ -32,13 +33,26 @@ foreach ($line in $lines) {
             Write-Host 'Calendar name changed to: ' + $NewTitle
         }
     }
+    elseif ($line -like 'DTSTART:*') {
+        # Check if start date filter is provided
+        if ($StartDate) {
+            $startDateFromEvent = Get-Date ($line -replace 'DTSTART:', '') -Format "yyyyMMdd"
+            $startDateProvided = Get-Date $StartDate -Format "yyyyMMdd"
+            
+            # If event's start date is before the provided start date, stop collecting this event
+            if ($startDateFromEvent -lt $startDateProvided) {
+                $collect = $false
+                $saveEvent = @()
+            }
+        }
+    }
     elseif ($line -like 'SUMMARY:*') {
-        # Found a Summary line.  Test filter.
+        # Found a Summary line. Test filter.
         if ($line -like ('*' + $FilterSummary + '*')) {
             Write-Host 'Found event.  ' + $line
         }
         else {
-            # Filter failed.  Stop collecting this event.
+            # Filter failed. Stop collecting this event.
             $collect = $false
             $saveEvent = @()
         }
@@ -51,7 +65,7 @@ foreach ($line in $lines) {
     if ($line -eq 'END:VEVENT') {
         if ($collect) {
             # Finished event, passed filter. Save to file
-            $foundCount++;
+            $foundCount++
             $saveFile += $saveEvent
         }
         $collect = $false
