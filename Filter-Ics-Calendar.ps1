@@ -6,15 +6,27 @@ param (
     [string]$NewTitle = ""
 )
 
+$header = $true
 $collect = $true
 $saveEvent = @()
 $saveFile = @()
+
+$startDateProvided = [datetime]::MinValue
+if ($StartDate) {
+    $startDateOK = [datetime]::TryParseExact($StartDate, "yyyy-MM-dd", 
+                   [System.Globalization.CultureInfo]::InvariantCulture, 
+                   [System.Globalization.DateTimeStyles]::None, 
+                   [ref]$startDateProvided)
+}
+
 
 $lines = Get-Content -Path $SourceFile
 $eventCount = 0
 $foundCount = 0
 foreach ($line in $lines) {
     if ($line -eq 'BEGIN:VEVENT') {
+        $header = $false
+
         if ($collect) {
             # Collection only started at header of file
             # Write all this to the file.
@@ -35,21 +47,28 @@ foreach ($line in $lines) {
     }
     elseif ($line -like 'DTSTART:*') {
         # Check if start date filter is provided
-        if ($StartDate) {
-            $startDateFromEvent = Get-Date ($line -replace 'DTSTART:', '') -Format "yyyyMMdd"
-            $startDateProvided = Get-Date $StartDate -Format "yyyyMMdd"
-            
-            # If event's start date is before the provided start date, stop collecting this event
-            if ($startDateFromEvent -lt $startDateProvided) {
-                $collect = $false
-                $saveEvent = @()
+        if ($header -ne $true) {
+            $startDateFromEvent = [datetime]::MinValue            
+            $eventDateOK = [datetime]::TryParseExact(($line -replace 'DTSTART:', ''), "yyyyMMddTHHmmssZ", 
+                            [System.Globalization.CultureInfo]::InvariantCulture, 
+                            [System.Globalization.DateTimeStyles]::None, 
+                            [ref]$startDateFromEvent)
+            if ($eventDateOK) {
+                # If event's start date is before the provided start date, stop collecting this event
+                if ($startDateFromEvent -lt $startDateProvided) {
+                    $collect = $false
+                    $saveEvent = @()
+                }
+            }
+            else {
+                Write-Host "Failed to parse date: $($line -replace 'DTSTART:', '')"
             }
         }
     }
     elseif ($line -like 'SUMMARY:*') {
         # Found a Summary line. Test filter.
         if ($line -like ('*' + $FilterSummary + '*')) {
-            Write-Host 'Found event.  ' + $line
+            Write-Host 'Found event: ' $line
         }
         else {
             # Filter failed. Stop collecting this event.
@@ -71,6 +90,11 @@ foreach ($line in $lines) {
         $collect = $false
         $saveEvent = @()
     }
+
+    if ($line -like 'END:VCALENDAR') {
+        $saveFile += $line
+    }
+
 }
 
 Write-Host 'Checked ' + $eventCount + ' events, selected ' + $foundCount + ' from filter "' + $FilterSummary + '".'
