@@ -1,7 +1,7 @@
 param (
     [string]$SourceFile = $(throw "-SourceFile is required."),
     [string]$DestFile = $(throw "-DestFile is required."),
-    [string]$FilterSummary = $(throw "-FilterSummary is required."),
+    [string]$Text = $(throw "-Text is required."),
     [string]$StartDate,
     [string]$NewTitle = ""
 )
@@ -67,7 +67,7 @@ foreach ($line in $lines) {
     }
     elseif ($line -like 'SUMMARY:*') {
         # Found a Summary line. Test filter.
-        if ($line -like ('*' + $FilterSummary + '*')) {
+        if ($line -like ('*' + $Text + '*')) {
             Write-Host 'Found event: ' $line
         }
         else {
